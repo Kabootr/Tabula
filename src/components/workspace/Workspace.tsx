@@ -1,23 +1,67 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import type { ColumnProfile, ParseResult } from '../../lib/csv/types';
+import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
+import type { ParseResult } from '../../lib/csv/types';
 import { parseFile } from '../../lib/csv/parse';
 import { profileColumns } from '../../lib/csv/profile';
-import { analyzeHealth } from '../../lib/csv/health';
+import { analyzeHealth, type IssueKind } from '../../lib/csv/health';
+import {
+  applyAllCleanOps,
+  applyCleanOp,
+  detectCleanOps,
+  FIXABLE_ISSUE_KINDS,
+  opForIssue,
+  summarizeApplied,
+  type CleanOpId,
+} from '../../lib/csv/clean';
 import { buildSchema } from '../../lib/chat/schema';
 import QueryProvider from '../providers/QueryProvider';
 import { Dropzone } from './Dropzone';
 import { DataTable } from './DataTable';
 import { FileSummary } from './FileSummary';
 import { HealthScore } from './HealthScore';
+import { CleanPanel } from './CleanPanel';
 import { Chat } from './Chat';
 
 type State =
   | { status: 'idle' }
   | { status: 'parsing'; fileName: string }
-  | { status: 'ready'; result: ParseResult; profiles: ColumnProfile[] }
+  | { status: 'ready'; result: ParseResult }
   | { status: 'error'; message: string };
 
 const XLSX_RE = /\.xlsx?$/i;
+
+// Undo/redo history of the working grid. Each cleaning op pushes a new present;
+// the past/future stacks make every transform reversible without recomputing.
+interface GridHistory {
+  past: ParseResult[];
+  present: ParseResult;
+  future: ParseResult[];
+}
+
+type HistoryAction =
+  | { type: 'commit'; next: ParseResult }
+  | { type: 'undo' }
+  | { type: 'redo' };
+
+function historyReducer(state: GridHistory, action: HistoryAction): GridHistory {
+  switch (action.type) {
+    case 'commit':
+      return { past: [...state.past, state.present], present: action.next, future: [] };
+    case 'undo':
+      if (state.past.length === 0) return state;
+      return {
+        past: state.past.slice(0, -1),
+        present: state.past[state.past.length - 1],
+        future: [state.present, ...state.future],
+      };
+    case 'redo':
+      if (state.future.length === 0) return state;
+      return {
+        past: [...state.past, state.present],
+        present: state.future[0],
+        future: state.future.slice(1),
+      };
+  }
+}
 
 export default function Workspace() {
   const [state, setState] = useState<State>({ status: 'idle' });
@@ -43,8 +87,7 @@ export default function Workspace() {
         });
         return;
       }
-      const profiles = profileColumns(result);
-      setState({ status: 'ready', result, profiles });
+      setState({ status: 'ready', result });
     } catch (err) {
       setState({
         status: 'error',
@@ -64,7 +107,11 @@ export default function Workspace() {
         {state.status === 'parsing' && <ParsingState fileName={state.fileName} />}
         {state.status === 'error' && <ErrorState message={state.message} onRetry={reset} />}
         {state.status === 'ready' && (
-          <ReadyState result={state.result} profiles={state.profiles} onNewFile={handleFile} />
+          <ReadyState
+            key={`${state.result.meta.fileName}|${state.result.meta.fileSize}|${state.result.meta.columnCount}`}
+            result={state.result}
+            onNewFile={handleFile}
+          />
         )}
       </main>
     </div>
@@ -119,7 +166,7 @@ function Hero({ onFile }: { onFile: (file: File) => void }) {
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FeatureCard color="bg-brand-teal text-on-dark" title="Data Health Score" live />
         <FeatureCard color="bg-brand-pink text-on-primary" title="Ask in plain English" live />
-        <FeatureCard color="bg-brand-lavender text-ink" title="One-click cleaning" />
+        <FeatureCard color="bg-brand-lavender text-ink" title="One-click cleaning" live />
       </div>
     </div>
   );
@@ -177,16 +224,59 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 }
 
 function ReadyState({
-  result,
-  profiles,
+  result: initial,
   onNewFile,
 }: {
   result: ParseResult;
-  profiles: ColumnProfile[];
   onNewFile: (file: File) => void;
 }) {
+  const [history, dispatch] = useReducer(
+    historyReducer,
+    initial,
+    (result): GridHistory => ({ past: [], present: result, future: [] }),
+  );
+  // Short "what just happened" line, shown until the next history navigation.
+  const [status, setStatus] = useState<string | null>(null);
+
+  const result = history.present;
+  const profiles = useMemo(() => profileColumns(result), [result]);
   const health = useMemo(() => analyzeHealth(result, profiles), [result, profiles]);
   const schema = useMemo(() => buildSchema(result, profiles, health), [result, profiles, health]);
+  const cleanOps = useMemo(() => detectCleanOps(result, profiles), [result, profiles]);
+
+  const applyOp = useCallback(
+    (id: CleanOpId) => {
+      const { result: next, changed } = applyCleanOp(result, profiles, id);
+      if (changed === 0) return;
+      dispatch({ type: 'commit', next });
+      setStatus(summarizeApplied([{ id, changed }]));
+    },
+    [result, profiles],
+  );
+
+  const applyAll = useCallback(() => {
+    const { result: next, applied } = applyAllCleanOps(result, profiles);
+    if (applied.length === 0) return;
+    dispatch({ type: 'commit', next });
+    setStatus(summarizeApplied(applied));
+  }, [result, profiles]);
+
+  const fixIssue = useCallback(
+    (kind: IssueKind) => {
+      const op = opForIssue(kind);
+      if (op) applyOp(op.id);
+    },
+    [applyOp],
+  );
+
+  const undo = useCallback(() => {
+    dispatch({ type: 'undo' });
+    setStatus(null);
+  }, []);
+  const redo = useCallback(() => {
+    dispatch({ type: 'redo' });
+    setStatus(null);
+  }, []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -204,7 +294,17 @@ function ReadyState({
       </div>
 
       <FileSummary result={result} />
-      <HealthScore report={health} />
+      <HealthScore report={health} fixableKinds={FIXABLE_ISSUE_KINDS} onFix={fixIssue} />
+      <CleanPanel
+        ops={cleanOps}
+        onApply={applyOp}
+        onApplyAll={applyAll}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={history.past.length > 0}
+        canRedo={history.future.length > 0}
+        status={status}
+      />
       <QueryProvider>
         <Chat result={result} profiles={profiles} schema={schema} />
       </QueryProvider>
@@ -243,10 +343,11 @@ function NewFileButton({ onFile }: { onFile: (file: File) => void }) {
   );
 }
 
-// These map to the still-deferred MVP features (#5–#7). Disabled buttons keep
+// These map to the still-deferred MVP features (#6–#7). Disabled buttons keep
 // the roadmap visible in-product without building ahead of the foundation.
-// Health Score (#3) and AI chat (#4) are now live and rendered above.
-const UPCOMING = ['Clean', 'Diff', 'Export'];
+// Health Score (#3), AI chat (#4), and one-click cleaning (#5) are now live
+// and rendered above.
+const UPCOMING = ['Diff', 'Export'];
 
 function FeatureToolbar() {
   return (

@@ -217,9 +217,17 @@ function DimensionCard({ dim }: { dim: HealthDimension }) {
 
 const MAX_CHIPS = 4;
 
-function IssueCard({ issue }: { issue: HealthIssue }) {
+interface FixProps {
+  /** Issue kinds that have a one-click fix; their cards show a Fix button. */
+  fixableKinds?: ReadonlySet<IssueKind>;
+  /** Apply the one-click fix for an issue. */
+  onFix?: (kind: IssueKind) => void;
+}
+
+function IssueCard({ issue, fixableKinds, onFix }: { issue: HealthIssue } & FixProps) {
   const sev = SEVERITY_THEME[issue.severity];
   const overflow = issue.columns.length - MAX_CHIPS;
+  const fixable = onFix != null && fixableKinds?.has(issue.kind) === true;
 
   return (
     <div className="flex w-full flex-col gap-3 rounded-lg border border-hairline bg-surface-card p-5">
@@ -288,9 +296,22 @@ function IssueCard({ issue }: { issue: HealthIssue }) {
           </svg>
           {issue.fix}
         </span>
-        <span className="rounded-full bg-surface-strong px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
-          Soon
-        </span>
+        {fixable ? (
+          <button
+            type="button"
+            onClick={() => onFix?.(issue.kind)}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-on-primary transition-colors hover:bg-primary-active"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            Fix
+          </button>
+        ) : (
+          <span className="rounded-full bg-surface-strong px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
+            Soon
+          </span>
+        )}
       </div>
     </div>
   );
@@ -388,7 +409,11 @@ function SpotlessState({ rows }: { rows: number }) {
 
 // --- panel ------------------------------------------------------------------
 
-export function HealthScore({ report }: { report: HealthReport }) {
+export function HealthScore({
+  report,
+  fixableKinds,
+  onFix,
+}: { report: HealthReport } & FixProps) {
   const theme = GRADE_THEME[report.grade];
   const { issues } = report;
   const ref = useRef<HTMLElement>(null);
@@ -447,7 +472,7 @@ export function HealthScore({ report }: { report: HealthReport }) {
                   className="flex motion-safe:animate-rise"
                   style={{ animationDelay: `${Math.min(i, 6) * 60}ms` }}
                 >
-                  <IssueCard issue={issue} />
+                  <IssueCard issue={issue} fixableKinds={fixableKinds} onFix={onFix} />
                 </div>
               ))}
             </div>
