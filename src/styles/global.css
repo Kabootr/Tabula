@@ -93,4 +93,21 @@
     letter-spacing: -0.04em;
     line-height: 1.05;
   }
+
+  /* Entrance motion for revealed panels (e.g. the Data Health Score). Pair with
+     Tailwind's `motion-safe:` variant so it's opt-out under reduced-motion. */
+  @keyframes tabula-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .animate-rise {
+    animation: tabula-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
 }

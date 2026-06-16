@@ -1,10 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ColumnProfile, ParseResult } from '../../lib/csv/types';
 import { parseFile } from '../../lib/csv/parse';
 import { profileColumns } from '../../lib/csv/profile';
+import { analyzeHealth } from '../../lib/csv/health';
 import { Dropzone } from './Dropzone';
 import { DataTable } from './DataTable';
 import { FileSummary } from './FileSummary';
+import { HealthScore } from './HealthScore';
 
 type State =
   | { status: 'idle' }
@@ -112,7 +114,7 @@ function Hero({ onFile }: { onFile: (file: File) => void }) {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FeatureCard color="bg-brand-teal text-on-dark" title="Data Health Score" />
+        <FeatureCard color="bg-brand-teal text-on-dark" title="Data Health Score" live />
         <FeatureCard color="bg-brand-pink text-on-primary" title="Ask in plain English" />
         <FeatureCard color="bg-brand-lavender text-ink" title="One-click cleaning" />
       </div>
@@ -120,13 +122,20 @@ function Hero({ onFile }: { onFile: (file: File) => void }) {
   );
 }
 
-function FeatureCard({ color, title }: { color: string; title: string }) {
+function FeatureCard({ color, title, live = false }: { color: string; title: string; live?: boolean }) {
   return (
     <div className={`flex items-center justify-between gap-2 rounded-xl p-4 ${color}`}>
       <span className="text-sm font-semibold">{title}</span>
-      <span className="rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-        Soon
-      </span>
+      {live ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+          Live
+        </span>
+      ) : (
+        <span className="rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+          Soon
+        </span>
+      )}
     </div>
   );
 }
@@ -173,6 +182,8 @@ function ReadyState({
   profiles: ColumnProfile[];
   onNewFile: (file: File) => void;
 }) {
+  const health = useMemo(() => analyzeHealth(result, profiles), [result, profiles]);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -189,6 +200,7 @@ function ReadyState({
       </div>
 
       <FileSummary result={result} />
+      <HealthScore report={health} />
       <FeatureToolbar />
       <DataTable result={result} profiles={profiles} />
     </div>
@@ -224,9 +236,10 @@ function NewFileButton({ onFile }: { onFile: (file: File) => void }) {
   );
 }
 
-// These map to the deferred MVP features (#3–#7). Disabled buttons keep the
-// roadmap visible in-product without building ahead of the foundation.
-const UPCOMING = ['Health Score', 'Ask AI', 'Clean', 'Diff', 'Export'];
+// These map to the still-deferred MVP features (#4–#7). Disabled buttons keep
+// the roadmap visible in-product without building ahead of the foundation.
+// Health Score (#3) is now live and rendered above, so it's no longer here.
+const UPCOMING = ['Ask AI', 'Clean', 'Diff', 'Export'];
 
 function FeatureToolbar() {
   return (

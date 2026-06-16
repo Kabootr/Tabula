@@ -6,9 +6,11 @@ import type { ColumnProfile, ColumnType, ParseResult } from './types';
  * will feed the Data Health Score (invalid emails/phones/dates) later.
  */
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const URL = /^(https?:\/\/|www\.)\S+$/i;
-const BOOLEAN = /^(true|false|yes|no)$/i;
+// Exported so the Data Health Score engine validates against the same rules the
+// type detector uses — one source of truth for what "a valid email" means here.
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const URL = /^(https?:\/\/|www\.)\S+$/i;
+export const BOOLEAN = /^(true|false|yes|no)$/i;
 // Symbol-prefixed ($1,000.50) or code-suffixed (1000 USD) money values.
 const CURRENCY =
   /^[+-]?[$€£¥₹]\s?\d{1,3}(,\d{3})*(\.\d+)?$|^[+-]?\d+(\.\d+)?\s?(usd|eur|gbp|inr|jpy|cad|aud)$/i;

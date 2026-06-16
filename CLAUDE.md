@@ -32,9 +32,10 @@ When you introduce one of these, prefer the versions and patterns the PRD implie
 The foundation is in place; later MVP features build on it. Still **check before assuming** anything beyond this list exists.
 
 - **Design system** — DESIGN.md tokens mirrored into [src/styles/global.css](src/styles/global.css) via Tailwind `@theme` (cream canvas, brand palette, radius scale, Inter). Use the generated utilities (`bg-canvas`, `text-ink`, `rounded-xl`, `bg-brand-pink`, …); never inline hex.
-- **CSV engine** (client-side, pure, dependency-free) in [src/lib/csv/](src/lib/csv/): `parse.ts` (RFC 4180 parser, delimiter auto-detect, UTF-8/UTF-16 BOM handling), `profile.ts` (per-column type detection), `types.ts` (the `ParseResult` / `ColumnProfile` data model **every feature reads from**).
-- **Workspace UI** — one React island, [src/components/workspace/Workspace.tsx](src/components/workspace/Workspace.tsx), composed of `Dropzone`, `DataTable` (smart preview), `FileSummary`, `TypeBadge`. Rendered from [src/pages/index.astro](src/pages/index.astro) via `client:load`.
-- Deferred MVP features (#3–#7) are surfaced in-product as disabled "Soon" buttons rather than built ahead.
+- **CSV engine** (client-side, pure, dependency-free) in [src/lib/csv/](src/lib/csv/): `parse.ts` (RFC 4180 parser, delimiter auto-detect, UTF-8/UTF-16 BOM handling), `profile.ts` (per-column type detection — its `EMAIL`/regex consts are exported so the health engine validates against the same rules), `health.ts` (the Data Health Score analyzer — see below), `types.ts` (the `ParseResult` / `ColumnProfile` data model **every feature reads from**).
+- **Data Health Score** (MVP feature #3) — `analyzeHealth(result, profiles)` in [src/lib/csv/health.ts](src/lib/csv/health.ts) returns a pure `HealthReport`: an overall 0–100 score + grade, four weighted sub-scores (completeness, validity, uniqueness, consistency), and a severity-sorted list of fixable `HealthIssue`s (missing values, duplicate rows, invalid emails/phones/dates, type mismatches, untrimmed whitespace, ragged rows). It does one pass over the grid; reuses `ColumnProfile.empty` for missing counts. Rendered by [src/components/workspace/HealthScore.tsx](src/components/workspace/HealthScore.tsx) — animated gauge (count-up + ring sweep, `prefers-reduced-motion`-aware), saturated dimension cards, and issue cards whose "fix" hints point at the not-yet-built one-click cleaning (#5). Entrance motion uses the `.animate-rise` utility in global.css behind Tailwind's `motion-safe:`.
+- **Workspace UI** — one React island, [src/components/workspace/Workspace.tsx](src/components/workspace/Workspace.tsx), composed of `Dropzone`, `DataTable` (smart preview), `FileSummary`, `HealthScore`, `TypeBadge`. `ReadyState` computes the health report via `useMemo`. Rendered from [src/pages/index.astro](src/pages/index.astro) via `client:load`.
+- Remaining deferred MVP features (#4–#7) are surfaced in-product as disabled "Soon" buttons rather than built ahead.
 
 Still client-only: no R2/D1/AI bindings or DuckDB yet — add them when a feature needs them (keeps the backend thin, per "Backend" below). The `/api/ping` Hono stub is the only backend route.
 
@@ -77,7 +78,7 @@ Rationale: the API only serves this frontend, and DuckDB WASM does the heavy dat
 
 1. ✅ File upload (CSV/TSV drag-drop, delimiter + encoding detection) — done; XLSX still deferred
 2. ✅ Smart preview (row/column preview, data-type detection) — done
-3. Data Health Score (missing values, duplicates, invalid emails/phones/dates)
+3. ✅ Data Health Score (missing values, duplicates, invalid emails/phones/dates) — done; engine in `src/lib/csv/health.ts`, UI in `src/components/workspace/HealthScore.tsx`
 4. AI chat (natural-language → data operations)
 5. One-click cleaning (dedupe, trim, normalize dates, fix case, etc.)
 6. CSV diff (added/deleted/modified rows)
