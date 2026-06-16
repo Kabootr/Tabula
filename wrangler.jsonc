@@ -10,6 +10,12 @@
 		"directory": "./dist",
 		"binding": "ASSETS"
 	},
+	// Workers AI — powers the natural-language → data-operations chat (MVP #4).
+	// The model runs server-side; the structured query it returns is executed
+	// client-side against the in-browser grid. Read in Hono as `c.env.AI`.
+	"ai": {
+		"binding": "AI"
+	},
 	"observability": {
 		"enabled": true
 	}

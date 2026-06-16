@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { chatRoutes } from './chat';
 
 /**
  * The Tabula backend. All routes live under /api (the basePath).
@@ -13,9 +14,11 @@ export const app = new Hono<{ Bindings: Env }>().basePath('/api');
 
 app.get('/ping', (c) => c.json({ ok: true, service: 'tabula-api' }));
 
-// Mount feature routers here as you build them, e.g.
+// AI chat — natural language → structured data query (MVP #4).
+app.route('/chat', chatRoutes);
+
+// Mount more feature routers here as you build them, e.g.
 // app.route('/upload', uploadRoutes);
-// app.route('/health', healthRoutes);
-// app.route('/chat', chatRoutes);
+// app.route('/diff', diffRoutes);
 
 export type AppType = typeof app;

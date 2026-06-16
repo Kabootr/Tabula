@@ -3,10 +3,13 @@ import type { ColumnProfile, ParseResult } from '../../lib/csv/types';
 import { parseFile } from '../../lib/csv/parse';
 import { profileColumns } from '../../lib/csv/profile';
 import { analyzeHealth } from '../../lib/csv/health';
+import { buildSchema } from '../../lib/chat/schema';
+import QueryProvider from '../providers/QueryProvider';
 import { Dropzone } from './Dropzone';
 import { DataTable } from './DataTable';
 import { FileSummary } from './FileSummary';
 import { HealthScore } from './HealthScore';
+import { Chat } from './Chat';
 
 type State =
   | { status: 'idle' }
@@ -115,7 +118,7 @@ function Hero({ onFile }: { onFile: (file: File) => void }) {
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FeatureCard color="bg-brand-teal text-on-dark" title="Data Health Score" live />
-        <FeatureCard color="bg-brand-pink text-on-primary" title="Ask in plain English" />
+        <FeatureCard color="bg-brand-pink text-on-primary" title="Ask in plain English" live />
         <FeatureCard color="bg-brand-lavender text-ink" title="One-click cleaning" />
       </div>
     </div>
@@ -183,6 +186,7 @@ function ReadyState({
   onNewFile: (file: File) => void;
 }) {
   const health = useMemo(() => analyzeHealth(result, profiles), [result, profiles]);
+  const schema = useMemo(() => buildSchema(result, profiles, health), [result, profiles, health]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -201,6 +205,9 @@ function ReadyState({
 
       <FileSummary result={result} />
       <HealthScore report={health} />
+      <QueryProvider>
+        <Chat result={result} profiles={profiles} schema={schema} />
+      </QueryProvider>
       <FeatureToolbar />
       <DataTable result={result} profiles={profiles} />
     </div>
@@ -236,10 +243,10 @@ function NewFileButton({ onFile }: { onFile: (file: File) => void }) {
   );
 }
 
-// These map to the still-deferred MVP features (#4–#7). Disabled buttons keep
+// These map to the still-deferred MVP features (#5–#7). Disabled buttons keep
 // the roadmap visible in-product without building ahead of the foundation.
-// Health Score (#3) is now live and rendered above, so it's no longer here.
-const UPCOMING = ['Ask AI', 'Clean', 'Diff', 'Export'];
+// Health Score (#3) and AI chat (#4) are now live and rendered above.
+const UPCOMING = ['Clean', 'Diff', 'Export'];
 
 function FeatureToolbar() {
   return (
